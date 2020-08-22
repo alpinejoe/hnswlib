@@ -227,11 +227,11 @@ namespace hnswlib {
     }
 #endif
 
-    class InnerProductSpace : public SpaceInterface<float> {
+    class InnerProductSpace : public SpaceInterface<float, float> {
 
         float (*fstdistfunc_)(const float *pVect1, const float *pVect2, const size_t qty);
     public:
-        InnerProductSpace(size_t dim) : SpaceInterface<float>(dim) {
+        InnerProductSpace(size_t dim) : SpaceInterface<float, float>(dim) {
             fstdistfunc_ = InnerProduct;
 #if defined(USE_AVX) || defined(USE_SSE)
             if (dim % 16 == 0)

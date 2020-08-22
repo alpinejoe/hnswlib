@@ -8,9 +8,10 @@
 namespace py = pybind11;
 
 typedef float src_t;
+typedef float vec_t;
 typedef float dist_t;
 typedef size_t label_t;
-typedef hnswlib::AlgorithmInterface<dist_t, label_t>::Neighbour neighbour_t;
+typedef hnswlib::AlgorithmInterface<vec_t, dist_t, label_t>::Neighbour neighbour_t;
 typedef py::array_t<neighbour_t> result_t;
 
 template<typename T>
@@ -211,7 +212,7 @@ public:
         if (appr_alg) {
             throw new std::runtime_error("The index is already initiated.");
         }
-        appr_alg = new hnswlib::HierarchicalNSW<dist_t, label_t>(l2space, maxElements, M, efConstruction, random_seed);
+        appr_alg = new hnswlib::HierarchicalNSW<vec_t, dist_t, label_t>(l2space, maxElements, M, efConstruction, random_seed);
         index_inited = true;
     }
 
@@ -249,7 +250,7 @@ public:
             std::cerr<<"Warning: Calling load_index for an already inited index. Old index is being deallocated.";
             delete appr_alg;
         }
-        appr_alg = new hnswlib::HierarchicalNSW<dist_t, label_t>(l2space, path_to_index, use_mmap, max_elements);
+        appr_alg = new hnswlib::HierarchicalNSW<vec_t, dist_t, label_t>(l2space, path_to_index, use_mmap, max_elements);
     }
 
     void addItems(py::object feature_vectors,
@@ -260,16 +261,16 @@ public:
         }
 
         if (normalize) {
-            auto processor = FeatureVectorsProcessor<src_t>(feature_vectors, dim);
-            std::vector<dist_t> norm_array(num_threads * dim);
+            auto processor = FeatureVectorsProcessor<vec_t>(feature_vectors, dim);
+            std::vector<vec_t> norm_array(num_threads * dim);
             processor.process(num_threads, [&](size_t row, int thread_id, const src_t *input_vector) {
-                dist_t *norm_vector = norm_array.data() + (thread_id * dim);
+                vec_t *norm_vector = norm_array.data() + (thread_id * dim);
                 normalizer->normalize_vector(input_vector, norm_vector);
                 appr_alg->addPoint(norm_vector, ids.at(row));
             });
         } else {
-            auto processor = FeatureVectorsProcessor<dist_t>(feature_vectors, dim);
-            processor.process(num_threads, [&](size_t row, int thread_id, const dist_t *input_vector) {
+            auto processor = FeatureVectorsProcessor<vec_t>(feature_vectors, dim);
+            processor.process(num_threads, [&](size_t row, int thread_id, const vec_t *input_vector) {
                 appr_alg->addPoint(input_vector, ids.at(row));
             });
         }
@@ -281,7 +282,7 @@ public:
         int size = ids.size();
         for (int i = 0; i < size; i++) {
             auto data = appr_alg->getDataByLabel(ids.at(i));
-            auto data_array = py::array_t<dist_t>(l2space->get_dimension(), data);
+            auto data_array = py::array_t<vec_t>(l2space->get_dimension(), data);
             py::detail::array_proxy(data_array.ptr())->flags &= ~py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
 
             features.append(std::move(data_array));
@@ -322,20 +323,20 @@ public:
         if (normalize) {
             auto processor = FeatureVectorsProcessor<src_t>(feature_vectors, dim);
             result_t all_results = getKnnResultArray(processor.getRows(), k);
-            std::vector<dist_t> norm_array(num_threads*dim);
+            std::vector<vec_t> norm_array(num_threads*dim);
 
             processor.process(num_threads, [&](size_t row, int thread_id, const src_t *input_vector) {
-                dist_t *norm_vector = norm_array.data() + (thread_id * dim);
+                vec_t *norm_vector = norm_array.data() + (thread_id * dim);
                 normalizer->normalize_vector(input_vector, norm_vector);
                 appr_alg->searchKnn(norm_vector, k, all_results.mutable_data(row));
             });
 
             return all_results;
         } else {
-            auto processor = FeatureVectorsProcessor<dist_t>(feature_vectors, dim);
+            auto processor = FeatureVectorsProcessor<vec_t>(feature_vectors, dim);
             result_t all_results = getKnnResultArray(processor.getRows(), k);
 
-            processor.process(num_threads, [&](size_t row, int thread_id, const dist_t *input_vector) {
+            processor.process(num_threads, [&](size_t row, int thread_id, const vec_t *input_vector) {
                 appr_alg->searchKnn(input_vector, k, all_results.mutable_data(row));
             });
 
@@ -370,9 +371,9 @@ public:
     bool index_inited;
     bool normalize;
     int num_threads_default;
-    hnswlib::HierarchicalNSW<dist_t, label_t> *appr_alg;
-    hnswlib::SpaceInterface<dist_t> *l2space;
-    hnswlib::NormalizerInterface<src_t, dist_t> *normalizer;
+    hnswlib::HierarchicalNSW<vec_t, dist_t, label_t> *appr_alg;
+    hnswlib::SpaceInterface<vec_t, dist_t> *l2space;
+    hnswlib::NormalizerInterface<src_t, vec_t> *normalizer;
 
     ~Index() {
         delete l2space;

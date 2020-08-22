@@ -61,7 +61,7 @@ namespace hnswlib {
         checkIOError(in);
     }
 
-    template<typename dist_t>
+    template<typename vec_t, typename dist_t>
     class SpaceInterface {
     protected:
         const size_t dim_;
@@ -74,12 +74,12 @@ namespace hnswlib {
             return dim_;
         }
 
-        virtual dist_t calculate_distance(const dist_t *pVect1, const dist_t *pVect2) = 0;
+        virtual dist_t calculate_distance(const vec_t *pVect1, const vec_t *pVect2) = 0;
 
         virtual ~SpaceInterface() {}
     };
 
-    template<typename src_t, typename dist_t>
+    template<typename src_t, typename vec_t>
     class NormalizerInterface {
         protected:
             const size_t dim_;
@@ -88,12 +88,12 @@ namespace hnswlib {
             NormalizerInterface(size_t dim) : dim_(dim) {
             }
 
-            virtual void normalize_vector(const src_t *data, dist_t *norm_array) = 0;
+            virtual void normalize_vector(const src_t *data, vec_t *norm_array) = 0;
 
             virtual ~NormalizerInterface() {}
     };
 
-    template<typename dist_t, typename labeltype>
+    template<typename vec_t, typename dist_t, typename labeltype>
     class AlgorithmInterface {
     public:
         struct Neighbour {
@@ -101,8 +101,8 @@ namespace hnswlib {
             labeltype label;
         };
 
-        virtual void addPoint(const dist_t *datapoint, const labeltype& label)=0;
-        virtual std::vector<Neighbour> searchKnn(const dist_t *, size_t) const = 0;
+        virtual void addPoint(const vec_t *datapoint, const labeltype& label)=0;
+        virtual std::vector<Neighbour> searchKnn(const vec_t *, size_t) const = 0;
         virtual void saveIndex(const std::string &location)=0;
         virtual ~AlgorithmInterface(){
         }

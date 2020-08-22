@@ -16,20 +16,20 @@ namespace hnswlib {
     typedef unsigned char flagint;
     typedef unsigned char linklistsizeint;
 
-    template<typename dist_t, typename labeltype=size_t>
-    class HierarchicalNSW : public AlgorithmInterface<dist_t, labeltype> {
+    template<typename vec_t, typename dist_t, typename labeltype=size_t>
+    class HierarchicalNSW : public AlgorithmInterface<vec_t, dist_t, labeltype> {
         const int INDEX_MAGIC_NUMBER = 0x484e5357;  //HNSW
         const int INDEX_VERSION = 2;
 
     public:
-        HierarchicalNSW(SpaceInterface<dist_t> *s, const std::string &location, bool mmap=false, size_t max_elements=0,
+        HierarchicalNSW(SpaceInterface<vec_t, dist_t> *s, const std::string &location, bool mmap=false, size_t max_elements=0,
                         tableint max_update_element_locks=65536) :
                 link_list_update_locks_(max_update_element_locks) {
             if (mmap) mmapLoad(location, s);
             else loadIndex(location, s, max_elements);
         }
 
-        HierarchicalNSW(SpaceInterface<dist_t> *s, size_t max_elements, linklistsizeint M=16,
+        HierarchicalNSW(SpaceInterface<vec_t, dist_t> *s, size_t max_elements, linklistsizeint M=16,
                         linklistsizeint ef_construction=200, size_t random_seed=100, tableint max_update_element_locks=65536) :
                 link_list_locks_(max_elements), link_list_update_locks_(max_update_element_locks) {
             if (M > std::numeric_limits<linklistsizeint>::max() / 2)
@@ -53,13 +53,13 @@ namespace hnswlib {
 //                 flagint flags;
 //                 linklistsizeint link_count;
 //                 tableint[maxM0_] links;
-//                 dist_t[space_->get_dimension()] vector;
+//                 vec_t[space_->get_dimension()] vector;
 //                 labeltype label;
 //             };
             size_t size_links_level0 = sizeof(flagint) + sizeof(linklistsizeint) + maxM0_ * sizeof(tableint);
-            size_data_per_element_ = size_links_level0 + sizeof(dist_t) * space_->get_dimension() + sizeof(labeltype);
+            size_data_per_element_ = size_links_level0 + sizeof(vec_t) * space_->get_dimension() + sizeof(labeltype);
             data_offset_ = size_links_level0;
-            label_offset_ = size_links_level0 + sizeof(dist_t) * space_->get_dimension();
+            label_offset_ = size_links_level0 + sizeof(vec_t) * space_->get_dimension();
 
             data_level0_memory_ = (char *) malloc(max_elements_ * size_data_per_element_);
             if (data_level0_memory_ == nullptr)
@@ -139,7 +139,7 @@ namespace hnswlib {
 
         bool has_deletions_;
 
-        SpaceInterface<dist_t> *space_;
+        SpaceInterface<vec_t, dist_t> *space_;
         MMap mmap_;
         std::default_random_engine level_generator_;
         std::default_random_engine update_probability_generator_;
@@ -170,8 +170,8 @@ namespace hnswlib {
             return (labeltype *) (((char *) getFlagsById(internal_id)) + label_offset_);
         }
 
-        inline dist_t *getDataByInternalId(tableint internal_id) const {
-            return (dist_t *) (((char *) getFlagsById(internal_id)) + data_offset_);
+        inline vec_t *getDataByInternalId(tableint internal_id) const {
+            return (vec_t *) (((char *) getFlagsById(internal_id)) + data_offset_);
         }
 
         inline tableint *getDataListP(linklistsizeint *list) const {
@@ -186,7 +186,7 @@ namespace hnswlib {
 
 
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst>
-        searchBaseLayer(tableint ep_id, const dist_t *data_point, int layer) {
+        searchBaseLayer(tableint ep_id, const vec_t *data_point, int layer) {
             VisitedList *vl = visited_list_pool_->getFreeVisitedList();
             vl_type *visited_array = vl->mass;
             vl_type visited_array_tag = vl->curV;
@@ -231,7 +231,7 @@ namespace hnswlib {
 
                     if (visited_array[candidate_id] == visited_array_tag) continue;
                     visited_array[candidate_id] = visited_array_tag;
-                    const dist_t *currObj1 = getDataByInternalId(candidate_id);
+                    const vec_t *currObj1 = getDataByInternalId(candidate_id);
 
                     dist_t dist1 = space_->calculate_distance(data_point, currObj1);
                     if (top_candidates.size() < ef_construction_ || lowerBound > dist1) {
@@ -257,7 +257,7 @@ namespace hnswlib {
         mutable std::atomic<long> metric_hops;
 
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst>
-        searchBaseLayerST(tableint ep_id, const dist_t *data_point, size_t ef, bool collect_metrics=false) const {
+        searchBaseLayerST(tableint ep_id, const vec_t *data_point, size_t ef, bool collect_metrics=false) const {
             VisitedList *vl = visited_list_pool_->getFreeVisitedList();
             vl_type *visited_array = vl->mass;
             vl_type visited_array_tag = vl->curV;
@@ -303,7 +303,7 @@ namespace hnswlib {
 
                         visited_array[candidate_id] = visited_array_tag;
 
-                        const dist_t *currObj1 = getDataByInternalId(candidate_id);
+                        const vec_t *currObj1 = getDataByInternalId(candidate_id);
                         dist_t dist = space_->calculate_distance(data_point, currObj1);
 
                         if (top_candidates.size() < ef || lowerBound > dist) {
@@ -367,7 +367,7 @@ namespace hnswlib {
             }
         }
 
-        tableint mutuallyConnectNewElement(const dist_t *data_point, tableint cur_c,
+        tableint mutuallyConnectNewElement(const vec_t *data_point, tableint cur_c,
                                            std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> &top_candidates,
                                            linklistsizeint level,
                                            bool isUpdate) {
@@ -561,7 +561,7 @@ namespace hnswlib {
             }
         }
 
-        void mmapLoad(const std::string &location, SpaceInterface<dist_t> *s) {
+        void mmapLoad(const std::string &location, SpaceInterface<vec_t, dist_t> *s) {
             char *input = mmap_.load(location);
 
             int actual_magic_number, actual_version;
@@ -632,7 +632,7 @@ namespace hnswlib {
             return new_ptr;
         }
 
-        void loadIndex(const std::string &location, SpaceInterface<dist_t> *s, size_t max_elements_i=0) {
+        void loadIndex(const std::string &location, SpaceInterface<vec_t, dist_t> *s, size_t max_elements_i=0) {
 
 
             std::ifstream input(location, std::ios::binary);
@@ -709,14 +709,14 @@ namespace hnswlib {
             input.close();
         }
 
-        dist_t* getDataByLabel(const labeltype& label) {
+        vec_t* getDataByLabel(const labeltype& label) {
             auto search = label_lookup_.find(label);
             if (search == label_lookup_.end() || isMarkedDeleted(search->second)) {
                 throw std::runtime_error("Label not found");
             }
             return getDataByInternalId(search->second);
-            // const dist_t* data_ptr = getDataByInternalId(search->second);
-            // return std::vector<dist_t>(data_ptr, data_ptr + space_->get_dimension());
+            // const vec_t* data_ptr = getDataByInternalId(search->second);
+            // return std::vector<vec_t>(data_ptr, data_ptr + space_->get_dimension());
         }
 
         static const flagint DELETE_MARK = 0x01;
@@ -760,9 +760,9 @@ namespace hnswlib {
             return *getFlagsById(internalId) & DELETE_MARK;
         }
 
-        void updatePoint(const dist_t *dataPoint, tableint internalId, float updateNeighborProbability) {
+        void updatePoint(const vec_t *dataPoint, tableint internalId, float updateNeighborProbability) {
             // update the feature vector associated with existing point with new vector
-            memcpy(getDataByInternalId(internalId), dataPoint, sizeof(dist_t) * space_->get_dimension());
+            memcpy(getDataByInternalId(internalId), dataPoint, sizeof(vec_t) * space_->get_dimension());
 
             int maxLevelCopy = maxlevel_;
             tableint entryPointCopy = enterpoint_node_;
@@ -837,7 +837,7 @@ namespace hnswlib {
             repairConnectionsForUpdate(dataPoint, entryPointCopy, internalId, elemLevel, maxLevelCopy);
         };
 
-        void repairConnectionsForUpdate(const dist_t *dataPoint, tableint entryPointInternalId, tableint dataPointInternalId, int dataPointLevel, int maxLevel) {
+        void repairConnectionsForUpdate(const vec_t *dataPoint, tableint entryPointInternalId, tableint dataPointInternalId, int dataPointLevel, int maxLevel) {
             tableint currObj = entryPointInternalId;
             if (dataPointLevel < maxLevel) {
                 dist_t curdist = space_->calculate_distance(dataPoint, getDataByInternalId(currObj));
@@ -908,7 +908,7 @@ namespace hnswlib {
             return result;
         };
 
-        void addPoint(const dist_t *data_point, const labeltype& label) {
+        void addPoint(const vec_t *data_point, const labeltype& label) {
             if (mmap_.isValid())
                 throw std::runtime_error("Cannot add, index loaded via mmap.");
 
@@ -958,7 +958,7 @@ namespace hnswlib {
 
             // Initialisation of the data and label
             memcpy(getExternalLabelP(cur_c), &label, sizeof(labeltype));
-            memcpy(getDataByInternalId(cur_c), data_point, sizeof(dist_t) * space_->get_dimension());
+            memcpy(getDataByInternalId(cur_c), data_point, sizeof(vec_t) * space_->get_dimension());
 
 
             if (curlevel) {
@@ -1022,8 +1022,8 @@ namespace hnswlib {
             }
         };
 
-        typedef typename AlgorithmInterface<dist_t, labeltype>::Neighbour neighbour_t;
-        std::vector<neighbour_t> searchKnn(const dist_t *query_data, size_t k) const {
+        typedef typename AlgorithmInterface<vec_t, dist_t, labeltype>::Neighbour neighbour_t;
+        std::vector<neighbour_t> searchKnn(const vec_t *query_data, size_t k) const {
             if (cur_element_count_ == 0) return std::vector<neighbour_t>();
 
             std::vector<neighbour_t> result(std::min(k, cur_element_count_));
@@ -1031,7 +1031,7 @@ namespace hnswlib {
             return result;
         }
 
-        void searchKnn(const dist_t *query_data, size_t k, neighbour_t *result_buffer) const {
+        void searchKnn(const vec_t *query_data, size_t k, neighbour_t *result_buffer) const {
             tableint currObj = enterpoint_node_;
             dist_t curdist = space_->calculate_distance(query_data, getDataByInternalId(enterpoint_node_));
 

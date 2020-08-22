@@ -3,12 +3,11 @@
 
 namespace hnswlib {
 
-    template<typename T>
-    static T
-    L2Sqr(const T *pVect1, const T *pVect2, const size_t qty) {
-        T res = 0;
+    template<typename vec_t, typename dist_t>
+    static dist_t L2Sqr(const vec_t *pVect1, const vec_t *pVect2, const size_t qty) {
+        dist_t res = 0;
         for (size_t i = 0; i < qty; i++) {
-            T t = pVect1[i] - pVect2[i];
+            dist_t t = pVect1[i] - pVect2[i];
             res += t * t;
         }
         return (res);
@@ -104,7 +103,7 @@ namespace hnswlib {
         float *pVect2 = (float *) pVect2v + qty16;
 
         size_t qty_left = qty - qty16;
-        float res_tail = L2Sqr(pVect1, pVect2, qty_left);
+        float res_tail = L2Sqr<float, float>(pVect1, pVect2, qty_left);
         return (res + res_tail);
     }
 #endif
@@ -141,16 +140,16 @@ namespace hnswlib {
         float res = L2SqrSIMD4Ext(pVect1v, pVect2v, qty4);
         size_t qty_left = qty - qty4;
 
-        float res_tail = L2Sqr(pVect1v + qty4, pVect2v + qty4, qty_left);
+        float res_tail = L2Sqr<float, float>(pVect1v + qty4, pVect2v + qty4, qty_left);
 
         return (res + res_tail);
     }
 #endif
 
-    class L2Space : public SpaceInterface<float> {
+    class L2Space : public SpaceInterface<float, float> {
         float (*fstdistfunc_)(const float *pVect1, const float *pVect2, const size_t qty);
     public:
-        L2Space(size_t dim) : SpaceInterface<float>(dim) {
+        L2Space(size_t dim) : SpaceInterface<float, float>(dim) {
 #if defined(USE_SSE) || defined(USE_AVX)
             if (dim % 16 == 0)
                 fstdistfunc_ = L2SqrSIMD16Ext;
@@ -162,7 +161,7 @@ namespace hnswlib {
                 fstdistfunc_ = L2SqrSIMD4ExtResiduals;
             else
 #endif
-            fstdistfunc_ = L2Sqr<float>;
+            fstdistfunc_ = L2Sqr<float, float>;
         }
 
         float calculate_distance(const float *pVect1, const float *pVect2) {
@@ -172,16 +171,36 @@ namespace hnswlib {
         ~L2Space() {}
     };
 
-    class L2SpaceI : public SpaceInterface<int> {
+    class L2SpaceI : public SpaceInterface<unsigned char, int> {
     public:
-        using SpaceInterface<int>::SpaceInterface;
+        using SpaceInterface<unsigned char, int>::SpaceInterface;
 
-        int calculate_distance(const int *pVect1, const int *pVect2)  {
-            return L2Sqr<int>(pVect1, pVect2, dim_);
+        int calculate_distance(const unsigned char *a, const unsigned char *b) {
+            //Ideally should
+            return L2Sqr<unsigned char, int>(a, b, dim_);
+            //But specifying different types for input vector and distance is unsupported right now and is required for running sift_1b tests
+            //where vectors are unsigned char and distance is int
+            // int res = 0;
+
+            // int qty = dim_ >> 2;
+            // for (size_t i = 0; i < qty; i++) {
+            //     res += ((*a) - (*b)) * ((*a) - (*b));
+            //     a++;
+            //     b++;
+            //     res += ((*a) - (*b)) * ((*a) - (*b));
+            //     a++;
+            //     b++;
+            //     res += ((*a) - (*b)) * ((*a) - (*b));
+            //     a++;
+            //     b++;
+            //     res += ((*a) - (*b)) * ((*a) - (*b));
+            //     a++;
+            //     b++;
+            // }
+
+            // return res;
         }
 
         ~L2SpaceI() {}
     };
-
-
 }

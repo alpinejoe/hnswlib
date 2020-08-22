@@ -5,20 +5,20 @@
 #include <algorithm>
 
 namespace hnswlib {
-    template<typename dist_t, typename labeltype=size_t>
-    class BruteforceSearch : public AlgorithmInterface<dist_t, labeltype> {
+    template<typename vec_t, typename dist_t, typename labeltype=size_t>
+    class BruteforceSearch : public AlgorithmInterface<vec_t, dist_t, labeltype> {
     public:
-        BruteforceSearch(SpaceInterface <dist_t> *s) {
+        BruteforceSearch(SpaceInterface <vec_t, dist_t> *s) {
 
         }
-        BruteforceSearch(SpaceInterface<dist_t> *s, const std::string &location) {
+        BruteforceSearch(SpaceInterface<vec_t, dist_t> *s, const std::string &location) {
             loadIndex(location, s);
         }
 
-        BruteforceSearch(SpaceInterface <dist_t> *s, size_t maxElements) {
+        BruteforceSearch(SpaceInterface <vec_t, dist_t> *s, size_t maxElements) {
             maxelements_ = maxElements;
             space_ = s;
-            data_size_ = sizeof(dist_t) * space_->get_dimension();
+            data_size_ = sizeof(vec_t) * space_->get_dimension();
             size_per_element_ = data_size_ + sizeof(labeltype);
             data_ = (char *) malloc(maxElements * size_per_element_);
             if (data_ == nullptr)
@@ -36,7 +36,7 @@ namespace hnswlib {
         size_t size_per_element_;
 
         size_t data_size_;
-        SpaceInterface<dist_t> space_;
+        SpaceInterface<vec_t, dist_t> space_;
         std::mutex index_lock;
 
         std::unordered_map<labeltype,size_t > dict_external_to_internal;
@@ -140,7 +140,7 @@ namespace hnswlib {
             output.close();
         }
 
-        void loadIndex(const std::string &location, SpaceInterface<dist_t> *s) {
+        void loadIndex(const std::string &location, SpaceInterface<vec_t, dist_t> *s) {
 
 
             std::ifstream input(location, std::ios::binary);
@@ -151,7 +151,7 @@ namespace hnswlib {
             readBinaryPOD(input, cur_element_count);
 
             space_ = s;
-            data_size_ = sizeof(dist_t) * space_->get_dimension();
+            data_size_ = sizeof(vec_t) * space_->get_dimension();
             size_per_element_ = data_size_ + sizeof(labeltype);
             data_ = (char *) malloc(maxelements_ * size_per_element_);
             if (data_ == nullptr)
